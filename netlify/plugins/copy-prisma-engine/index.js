@@ -6,6 +6,7 @@
 // engine is missing, so a broken deploy never goes live.
 const fs = require('fs')
 const path = require('path')
+const { execSync } = require('child_process')
 
 const ENGINE = 'libquery_engine-rhel-openssl-3.0.x.so.node'
 const SRC_DIR = 'node_modules/.prisma/client'
@@ -14,9 +15,18 @@ const DEST_DIR =
 
 module.exports = {
   onBuild({ utils }) {
-    const src = path.join(SRC_DIR, ENGINE)
+    let src = path.join(SRC_DIR, ENGINE)
     if (!fs.existsSync(src)) {
-      return utils.build.failBuild(`${src} was not generated; check binaryTargets in prisma/pgsql/schema.prisma`)
+      // Prisma writes .prisma/client next to wherever @prisma/client really
+      // resolves, which isn't always the flat path, so search for it.
+      const found = execSync(`find -L node_modules -name '${ENGINE}' 2>/dev/null || true`)
+        .toString().trim().split('\n').filter(Boolean)
+      console.log(`${src} missing; found: ${found.join(', ') || 'none'}`)
+      console.log(`@prisma/client resolves to ${fs.realpathSync('node_modules/@prisma/client')}`)
+      if (!found.length) {
+        return utils.build.failBuild(`${ENGINE} was not generated; check binaryTargets in prisma/pgsql/schema.prisma`)
+      }
+      src = found[0]
     }
     if (!fs.existsSync(DEST_DIR)) {
       return utils.build.failBuild(`${DEST_DIR} not found; did the Next.js runtime change its layout?`)
