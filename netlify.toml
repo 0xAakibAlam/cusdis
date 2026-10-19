@@ -1,0 +1,16 @@
+# Netlify config for this Cusdis fork (comments for 0xaakibalam.com/blogs).
+#
+# `pnpm run build` also runs `prisma migrate deploy`, so DB_URL must be set in
+# Netlify's environment variables (not here) and must be Neon's DIRECT connection
+# string, not the "-pooler" one: Prisma migrations break through a pooler.
+# Netlify picks the Next.js runtime automatically; Prisma's Lambda engine comes
+# from `binaryTargets` in prisma/pgsql/schema.prisma.
+
+[build]
+  command = "pnpm run build"
+  publish = ".next"
+
+[build.environment]
+  # Next 13.5 and node-expat 2.4.1 are verified on Node 22 locally.
+  NODE_VERSION = "22"
+  DB_TYPE = "pgsql"
