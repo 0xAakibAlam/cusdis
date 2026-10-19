@@ -186,6 +186,9 @@ export class CommentService extends RequestScopeService {
         by_nickname: body.nickname,
         pageId: page.id,
         parentId,
+        // AUTO_APPROVE=true publishes comments immediately instead of holding
+        // them for approval in the dashboard (0xAakibAlam fork addition).
+        approved: process.env.AUTO_APPROVE === 'true',
       },
     })
 
