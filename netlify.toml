@@ -28,3 +28,7 @@
 # output, which carries Prisma's engine. v4, installed from Netlify's UI, did not.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Must come after the Next.js runtime: it patches the function that runtime builds.
+[[plugins]]
+  package = "./netlify/plugins/copy-prisma-engine"
