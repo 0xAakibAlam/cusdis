@@ -32,3 +32,12 @@
 # Must come after the Next.js runtime: it patches the function that runtime builds.
 [[plugins]]
   package = "./netlify/plugins/copy-prisma-engine"
+
+# The widget loads /js/iframe.umd.js as a <script type="module"> from inside an
+# iframe whose origin is the blog, and browsers only run a cross-site module
+# script when the response carries CORS headers. Without this the comment box
+# stays empty on every embedding site.
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
