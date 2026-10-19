@@ -14,3 +14,12 @@
   # Next 13.5 and node-expat 2.4.1 are verified on Node 22 locally.
   NODE_VERSION = "22"
   DB_TYPE = "pgsql"
+
+# Belt and braces with next.config.js's outputFileTracingIncludes: ship Prisma's
+# Lambda engine with every function. .npmrc's node-linker=hoisted keeps it at this
+# flat path instead of deep inside node_modules/.pnpm.
+[functions]
+  included_files = [
+    "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node",
+    "node_modules/.prisma/client/schema.prisma",
+  ]
