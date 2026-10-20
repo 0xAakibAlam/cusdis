@@ -1,13 +1,18 @@
 import Document, { Html, Head, Main, NextScript } from 'next/document'
-import { resolvedConfig } from '../utils.server'
 
 class MyDocument extends Document {
-
   render() {
     return (
-      <Html>
+      <Html lang="en">
         <Head>
-          {resolvedConfig.umami.id && <script async defer data-website-id={resolvedConfig.umami.id} src={resolvedConfig.umami.src}></script>}
+          <meta name="robots" content="noindex" />
+          <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+          <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@100..900&display=swap"
+          />
         </Head>
         <body>
           <Main />

@@ -1,79 +1,51 @@
+# Comments for 0xaakibalam.com/blogs
 
-<p align="center"><a href="https://cusdis.com" target="_blank" rel="noopener noreferrer"><img width="100" src="/public/images/artworks/logo-256.png" alt="logo"></a></p>
+The comment backend behind [0xaakibalam.com/blogs](https://0xaakibalam.com/blogs/). It's a
+trimmed fork of [Cusdis](https://github.com/djyde/cusdis) (MIT, now deprecated upstream): only
+what the blog's comments need is left. Live at
+<https://0xaakibalam-blog-comments.netlify.app> (Netlify, with a free Neon Postgres).
 
-Cusdis is an open-source, lightweight (~5kb gzip), privacy-friendly alternative to Disqus.
+## What's here
 
-> !!! IMPORTANT
-> Cusdis is deprecated now. If you want to export your data. Please email hi@cusdis.com. Send us your signed email address and the export format you want.
-> Very sorry for this.
+- **Public API** the blog calls (CORS open, no auth):
+  - `GET /api/open/comments?appId&pageId&page`: a page's approved comments, with replies.
+  - `POST /api/open/comments`: post a comment (`appId, pageId, nickname, content, parentId?`).
+  - `GET /api/open/project/<appId>/comments/count?pageIds=a,b`: approved counts per page.
+- **Dashboard** (`/dashboard`, one admin): add, rename, and delete sites; read every comment;
+  reply as the author; delete; approve held comments.
+- **Sign-in page** (`/login`), styled like the blog.
 
+The blog's side is `site/_includes/comments.html` and `site/assets/js/comments.js` in
+[0xAakibAlam.github.io](https://github.com/0xAakibAlam/0xAakibAlam.github.io).
 
+## Environment
 
-![](/public/images/landing.png)
+| Variable | What it is |
+|---|---|
+| `DB_URL` | Neon's **direct** Postgres URL (not `-pooler`; migrations break through a pooler) |
+| `USERNAME`, `PASSWORD` | The one admin login |
+| `JWT_SECRET` | Signs the session cookie |
+| `NEXTAUTH_URL` | This site's own URL |
+| `AUTO_APPROVE` | `true` publishes comments immediately; anything else holds them for approval |
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https%3A%2F%2Fgithub.com%2Fdjyde%2Fcusdis&plugins=postgresql&envs=NEXTAUTH_URL%2CDB_TYPE%2CDB_URL%2CUSERNAME%2CPASSWORD%2CHOST%2CJWT_SECRET%2CPORT&NEXTAUTH_URLDesc=Don%27t+modify+it&DB_TYPEDesc=Don%27t+modify+it&DB_URLDesc=Don%27t+modify+it&USERNAMEDesc=Username+to+sign+in&PASSWORDDesc=Password+to+sign+in&HOSTDesc=Don%27t+modify+it&JWT_SECRETDesc=A+secret+key+to+encrypt+JWT+token&PORTDesc=Don%27t+modify+it&NEXTAUTH_URLDefault=%24%7B%7B+RAILWAY_STATIC_URL+%7D%7D&DB_TYPEDefault=pgsql&DB_URLDefault=%24%7B%7B+DATABASE_URL+%7D%7D&HOSTDefault=https%3A%2F%2F%24%7B%7B+RAILWAY_STATIC_URL+%7D%7D&PORTDefault=3000&referralCode=randyloop)
+## Run it
 
-## 💝 Sponsor this project
+```sh
+pnpm install
+pnpm dev          # needs a .env with the variables above
+pnpm build        # prisma generate + migrate deploy + next build
+```
 
-If you like Cusdis, please consider sponsoring us to help us be sustainable.
+## Netlify-only fixes
 
-### Principle Sponsor
+Each is explained where it lives; keep them if this is ever rebased on upstream.
 
-[![Slide 16_9 - 1](https://github.com/djyde/cusdis/assets/914329/0a773f41-6baf-4bdc-897e-e96f56991acc)](https://epubkit.app)
+- `netlify/plugins/copy-prisma-engine`: Netlify's build machines don't generate Prisma's
+  Lambda engine where the function expects it, so this copies it in.
+- `netlify/edge-functions/cors-preflight.ts`: answers CORS preflights at the edge; through
+  Netlify's Next.js runtime they hung until the 30s timeout.
+- `apiHandler` in `utils.server.ts`: settles next-connect's promise when the response is
+  sent; otherwise every open-API request held its connection for 30s.
 
-
-[![Contributors](https://opencollective.com/cusdis/tiers/organization-support/0/avatar.svg)](https://opencollective.com/cusdis/tiers/organization-support/0/website)
-
-[Become a principle sponsor](https://opencollective.com/cusdis/contribute/organization-support-27992/checkout)
-
-### Sponsors / Backers
-
-[![Contributors](https://opencollective.com/cusdis/tiers/sponsor.svg?avatarHeight=50)](https://opencollective.com/cusdis)
-[![Contributors](https://opencollective.com/cusdis/tiers/backer.svg?avatarHeight=50)](https://opencollective.com/cusdis)
-
-## Features
-
-- Lightweight comment widget, with i18n, dark mode.
-- Email notification
-- Webhook
-- Easy to self-host
-- Many integrations
-
-## Documentation
-
-https://cusdis.com/doc
-
-## Community
-
-[Discord](https://discord.gg/eDs5fc4Jcq)
-
-## FAQ
-
-## Compared to Disqus
-
-Cusdis is not designed to be a complete alternative to Disqus. It's aim is to implement a minimalist and embeddable comment system for small websites (such as your static blog).
-
-Given below are the pros and cons of Cusdis:
-
-### Pros
-
-- Cusdis is open-source and self-hostable. Hence, you own your data.
-- The SDK is lightweight(~5kb gzipped).
-- Cusdis doesn't require your user to sign in to make a comment.
-- Cusdis doesn't use cookies at all.
-
-### Cons
-
-- Cusdis is on the early stages of its development.
-- There is no spam filter, hence, you will have to manually moderate your comment section and comments won't be displayed until you approve them.
-- Disqus is a company, we aren't.
-
-## Contributing
-
-[Contributing Guide](https://cusdis.com/doc#/contributing)
-
-If you are going to make a PR, remember to choose `dev` as the base branch.
-
-# License
-
-GNU GPLv3
+The database schema still has upstream's unused tables (subscriptions, usage, etc.). They
+cost nothing, and dropping them would need a migration.

@@ -1,17 +1,14 @@
-import { Comment, Page, Prisma, User } from '@prisma/client'
-import { RequestScopeService, UserSession } from '.'
-import { prisma, resolvedConfig } from '../utils.server'
+import { Comment, Page, Prisma } from '@prisma/client'
+import { RequestScopeService } from '.'
+import { prisma } from '../utils.server'
 import { PageService } from './page.service'
 import dayjs from 'dayjs'
 import MarkdownIt from 'markdown-it'
-import { HookService } from './hook.service'
-import { statService } from './stat.service'
-import { EmailService } from './email.service'
-import { TokenService } from './token.service'
-import { makeConfirmReplyNotificationTemplate } from '../templates/confirm_reply_notification'
 import utc from 'dayjs/plugin/utc'
 dayjs.extend(utc)
 
+// Raw HTML is off by default in markdown-it, and links and images are disabled,
+// so parsedContent is safe for the blog to insert as HTML.
 export const markdown = MarkdownIt({
   linkify: true,
 })
@@ -35,9 +32,6 @@ export type CommentItem = Comment & {
 
 export class CommentService extends RequestScopeService {
   pageService = new PageService(this.req)
-  hookService = new HookService(this.req)
-  emailService = new EmailService()
-  tokenService = new TokenService()
 
   async getComments(
     projectId: string,
@@ -77,23 +71,19 @@ export class CommentService extends RequestScopeService {
             equals: null,
           },
           ownerId: options?.onlyOwn
-            ? await (await this.getSession()).uid
+            ? (await this.getSession()).uid
             : undefined,
         },
       },
     } as Prisma.CommentWhereInput
-
-    const baseQuery = {
-      select,
-      where,
-    }
 
     const page = options?.page || 1
 
     const [commentCount, comments] = await prisma.$transaction([
       prisma.comment.count({ where }),
       prisma.comment.findMany({
-        ...baseQuery,
+        select,
+        where,
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: {
@@ -107,20 +97,20 @@ export class CommentService extends RequestScopeService {
 
     const allComments = await Promise.all(
       comments.map(async (comment: Comment) => {
-        // get replies
         const replies = await this.getComments(projectId, timezoneOffset, {
           ...options,
           page: 1,
-          // hard code 100 because we havent implement pagination in nested comment
+          // Nested replies aren't paginated; 100 is plenty for one thread.
           pageSize: 100,
           parentId: comment.id,
           pageSlug: options?.pageSlug,
           select,
         })
 
-        const parsedCreatedAt = dayjs.utc(comment.createdAt).utcOffset(timezoneOffset).format(
-          'YYYY-MM-DD HH:mm',
-        )
+        const parsedCreatedAt = dayjs
+          .utc(comment.createdAt)
+          .utcOffset(timezoneOffset)
+          .format('YYYY-MM-DD HH:mm')
         const parsedContent = markdown.render(comment.content) as string
         return {
           ...comment,
@@ -158,7 +148,7 @@ export class CommentService extends RequestScopeService {
       },
     })
 
-    return res.page.project
+    return res?.page.project
   }
 
   async addComment(
@@ -173,13 +163,12 @@ export class CommentService extends RequestScopeService {
     },
     parentId?: string,
   ) {
-    // touch page
     const page = await this.pageService.upsertPage(pageSlug, projectId, {
       pageTitle: body.pageTitle,
       pageUrl: body.pageUrl,
     })
 
-    const created = await prisma.comment.create({
+    return await prisma.comment.create({
       data: {
         content: body.content,
         by_email: body.email,
@@ -187,30 +176,21 @@ export class CommentService extends RequestScopeService {
         pageId: page.id,
         parentId,
         // AUTO_APPROVE=true publishes comments immediately instead of holding
-        // them for approval in the dashboard (0xAakibAlam fork addition).
+        // them for approval in the dashboard.
         approved: process.env.AUTO_APPROVE === 'true',
       },
     })
-
-    this.hookService.addComment(created, projectId)
-
-    return created
   }
 
-  async addCommentAsModerator(parentId: string, content: string, options?: {
-    owner?: User
-  }) {
-    const session = options?.owner ? {
-      user: options.owner,
-      uid: options.owner.id
-    } : await this.getSession()
+  async addCommentAsModerator(parentId: string, content: string) {
+    const session = await this.getSession()
     const parent = await prisma.comment.findUnique({
       where: {
         id: parentId,
       },
     })
 
-    const created = await prisma.comment.create({
+    return await prisma.comment.create({
       data: {
         content: content,
         by_email: session.user.email,
@@ -221,8 +201,6 @@ export class CommentService extends RequestScopeService {
         parentId,
       },
     })
-
-    return created
   }
 
   async approve(commentId: string) {
@@ -234,37 +212,24 @@ export class CommentService extends RequestScopeService {
         approved: true,
       },
     })
-
-    statService.capture('comment_approve')
   }
 
+  // Soft-deletes the comment and every reply under it, level by level (a BFS
+  // over the reply tree). Without the cascade, orphaned replies stayed in the
+  // counts while never being shown.
   async delete(commentId: string) {
-    await prisma.comment.update({
-      where: {
-        id: commentId,
-      },
-      data: {
-        deletedAt: new Date(),
-      },
-    })
-  }
-
-  async sendConfirmReplyNotificationEmail(
-    to: string,
-    pageSlug: string,
-    commentId: string,
-  ) {
-    const confirmToken = this.tokenService.genAcceptNotifyToken(commentId)
-    const confirmLink = `${resolvedConfig.host}/api/open/confirm_reply_notification?token=${confirmToken}`
-    this.emailService.send({
-      to,
-      from: this.emailService.sender,
-      subject: `Please confirm reply notification`,
-      html: makeConfirmReplyNotificationTemplate({
-        page_slug: pageSlug,
-        confirm_url: confirmLink,
-      }),
-    })
-    statService.capture('send_reply_confirm_email')
+    const now = new Date()
+    let frontier = [commentId]
+    while (frontier.length) {
+      await prisma.comment.updateMany({
+        where: { id: { in: frontier } },
+        data: { deletedAt: now },
+      })
+      const children = await prisma.comment.findMany({
+        where: { parentId: { in: frontier }, deletedAt: null },
+        select: { id: true },
+      })
+      frontier = children.map((c) => c.id)
+    }
   }
 }

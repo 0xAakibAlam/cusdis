@@ -1,13 +1,13 @@
-import { Prisma, Project, User } from '@prisma/client'
-import { nanoid } from 'nanoid'
+import { Prisma, Project } from '@prisma/client'
 import { RequestScopeService } from '.'
 import { prisma } from '../utils.server'
-import { statService } from './stat.service'
 
+// A "project" is a site: one blog (or any other site) whose comments this
+// instance stores. Its id is the app id the site embeds.
 export class ProjectService extends RequestScopeService {
   async create(title: string) {
     const session = await this.getSession()
-    const created = await prisma.project.create({
+    return await prisma.project.create({
       data: {
         title,
         owner: {
@@ -17,10 +17,6 @@ export class ProjectService extends RequestScopeService {
         },
       },
     })
-
-    statService.capture('project_create')
-
-    return created
   }
 
   async get(
@@ -29,46 +25,30 @@ export class ProjectService extends RequestScopeService {
       select?: Prisma.ProjectSelect
     },
   ) {
-    const project = await prisma.project.findUnique({
+    return await prisma.project.findUnique({
       where: {
         id: projectId,
       },
       select: options?.select,
     })
-
-    return project
   }
 
-  // list all projects
+  // The signed-in owner's sites, oldest first.
   async list() {
     const session = await this.getSession()
-    const projects = await prisma.project.findMany({
+    return await prisma.project.findMany({
       where: {
         deletedAt: null,
         ownerId: session.uid,
       },
+      orderBy: {
+        createdAt: 'asc',
+      },
       select: {
         id: true,
         title: true,
-      }
-    })
-
-    return projects
-  }
-
-  // (re)generate token
-  async regenerateToken(projectId: string) {
-    const id = nanoid(24)
-    await prisma.project.update({
-      where: {
-        id: projectId,
-      },
-      data: {
-        token: id,
       },
     })
-
-    return id
   }
 
   async getFirstProject(ownerId: string, options?: {
@@ -77,95 +57,49 @@ export class ProjectService extends RequestScopeService {
     const project = await prisma.project.findFirst({
       where: {
         ownerId,
-        deletedAt: null
+        deletedAt: null,
       },
       orderBy: {
-        createdAt: 'asc'
+        createdAt: 'asc',
       },
-      select:  options?.select
+      select: options?.select,
     })
 
     return project as Project
   }
 
-  async fetchLatestComment(
-    projectId: string,
-    options?: {
-      from?: Date
-      take?: number,
-      markAsRead?: boolean
-    },
-  ) {
-    const now = new Date()
-    const results = await prisma.comment.findMany({
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: options?.take || 20,
+  async rename(projectId: string, title: string) {
+    await prisma.project.update({
       where: {
-        deletedAt: {
-          equals: null
-        },
-        approved: false,
-        moderatorId: {
-          equals: null
-        },
-        page: {
-          projectId,
-        },
-        createdAt: {
-          gte: options?.from ? options?.from : undefined,
-        },
+        id: projectId,
       },
-      select: {
-        by_email: true,
-        by_nickname: true,
-        content: true,
-        createdAt: true,
+      data: {
+        title,
       },
     })
-
-    if (options?.markAsRead) {
-      await prisma.project.update({
-        where: {
-          id: projectId
-        },
-        data: {
-          fetchLatestCommentsAt: now
-        }
-      })
-    }
-
-    return results
   }
 
   async delete(projectId: string) {
     await prisma.project.update({
       where: {
-        id: projectId
+        id: projectId,
       },
-      data:{
-        deletedAt: new Date()
-      }
+      data: {
+        deletedAt: new Date(),
+      },
     })
-
-    statService.capture('project_delete')
   }
 
   async isDeleted(projectId: string) {
     const project = await prisma.project.findUnique({
       where: {
-        id: projectId
+        id: projectId,
       },
       select: {
-        deletedAt: true
-      }
+        deletedAt: true,
+      },
     })
 
-    if (project && !project.deletedAt) {
-      return false
-    }
-
-    return true
+    return !(project && !project.deletedAt)
   }
 }

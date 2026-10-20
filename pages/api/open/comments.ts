@@ -1,4 +1,5 @@
-import { NextApiRequest, NextApiResponse } from 'next'
+// The public API the blog's comment thread talks to (site/assets/js/comments.js
+// in 0xAakibAlam.github.io). No auth: anyone can read approved comments and post.
 import {
   CommentService,
   CommentWrapper,
@@ -6,12 +7,13 @@ import {
 import { apiHandler } from '../../../utils.server'
 import Cors from 'cors'
 import { ProjectService } from '../../../service/project.service'
-import { statService } from '../../../service/stat.service'
+
+const MAX_NICKNAME = 60
+const MAX_CONTENT = 5000
 
 export default apiHandler()
   .use(
     Cors({
-      // Only allow requests with GET, POST and OPTIONS
       methods: ['GET', 'POST', 'OPTIONS'],
     }),
   )
@@ -19,18 +21,13 @@ export default apiHandler()
     const commentService = new CommentService(req)
     const projectService = new ProjectService(req)
 
-    // get all comments
     const query = req.query as {
       page?: string
       appId: string
       pageId: string
     }
 
-    const timezoneOffsetInHour = req.headers['x-timezone-offset']
-
-    const isDeleted = await projectService.isDeleted(query.appId)
-
-    if (isDeleted) {
+    if (await projectService.isDeleted(query.appId)) {
       res.status(404)
       res.json({
         data: {
@@ -43,27 +40,9 @@ export default apiHandler()
       return
     }
 
-    statService.capture('get_comments', {
-      identity: query.appId,
-      properties: {
-        from: 'open_api',
-      },
-    })
-
-    const queryCommentStat = statService.start(
-      'query_comments',
-      'Query Comments',
-      {
-        tags: {
-          project_id: query.appId,
-          from: 'open_api',
-        },
-      },
-    )
-
     const comments = await commentService.getComments(
       query.appId,
-      Number(timezoneOffsetInHour),
+      Number(req.headers['x-timezone-offset']) || 0,
       {
         approved: true,
         parentId: null,
@@ -73,14 +52,12 @@ export default apiHandler()
           by_nickname: true,
           moderator: {
             select: {
-              displayName: true
-            }
-          }
+              displayName: true,
+            },
+          },
         },
       },
     )
-
-    queryCommentStat.end()
 
     res.json({
       data: comments,
@@ -89,22 +66,30 @@ export default apiHandler()
   .post(async (req, res) => {
     const commentService = new CommentService(req)
     const projectService = new ProjectService(req)
-    // add comment
     const body = req.body as {
       parentId?: string
       appId: string
       pageId: string
       content: string
-      acceptNotify?: boolean
-      email: string
+      email?: string
       nickname: string
       pageUrl?: string
       pageTitle?: string
     }
 
-    const isDeleted = await projectService.isDeleted(body.appId)
+    // Comments publish straight away (AUTO_APPROVE), so reject the obviously
+    // malformed ones here rather than in the dashboard.
+    const content = typeof body.content === 'string' ? body.content.trim() : ''
+    const nickname = typeof body.nickname === 'string' ? body.nickname.trim() : ''
+    if (!content || !nickname || content.length > MAX_CONTENT || nickname.length > MAX_NICKNAME) {
+      res.status(400)
+      res.json({
+        message: `A name (up to ${MAX_NICKNAME} characters) and a comment (up to ${MAX_CONTENT}) are required.`,
+      })
+      return
+    }
 
-    if (isDeleted) {
+    if (await projectService.isDeleted(body.appId)) {
       res.status(404)
       res.json({
         message: 'Project not found',
@@ -116,29 +101,14 @@ export default apiHandler()
       body.appId,
       body.pageId,
       {
-        content: body.content,
-        email: body.email,
-        nickname: body.nickname,
+        content,
+        email: typeof body.email === 'string' ? body.email.trim() : '',
+        nickname,
         pageTitle: body.pageTitle,
         pageUrl: body.pageUrl,
       },
       body.parentId,
     )
-
-    // send confirm email
-    if (body.acceptNotify === true && body.email) {
-      try {
-        commentService.sendConfirmReplyNotificationEmail(
-          body.email,
-          body.pageTitle,
-          comment.id,
-        )
-      } catch (e) {
-        // TODO: log error
-      }
-    }
-
-    statService.capture('add_comment')
 
     res.json({
       data: comment,

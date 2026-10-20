@@ -24,7 +24,7 @@ module.exports = {
       console.log(`${src} missing; found: ${found.join(', ') || 'none'}`)
       console.log(`@prisma/client resolves to ${fs.realpathSync('node_modules/@prisma/client')}`)
       if (!found.length) {
-        return utils.build.failBuild(`${ENGINE} was not generated; check binaryTargets in prisma/pgsql/schema.prisma`)
+        return utils.build.failBuild(`${ENGINE} was not generated; check binaryTargets in prisma/schema.prisma`)
       }
       src = found[0]
     }

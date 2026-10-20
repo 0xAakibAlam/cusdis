@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import {
   apiHandler,
-  initMiddleware,
   prisma,
 } from '../../../../../../utils.server'
 import Cors from 'cors'

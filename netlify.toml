@@ -1,43 +1,30 @@
-# Netlify config for this Cusdis fork (comments for 0xaakibalam.com/blogs).
+# Netlify config for the comments backend of 0xaakibalam.com/blogs.
 #
 # `pnpm run build` also runs `prisma migrate deploy`, so DB_URL must be set in
 # Netlify's environment variables (not here) and must be Neon's DIRECT connection
 # string, not the "-pooler" one: Prisma migrations break through a pooler.
-# Netlify picks the Next.js runtime automatically; Prisma's Lambda engine comes
-# from `binaryTargets` in prisma/pgsql/schema.prisma.
+# Prisma's Lambda engine comes from `binaryTargets` in prisma/schema.prisma.
 
 [build]
   command = "pnpm run build"
   publish = ".next"
 
 [build.environment]
-  # Next 13.5 and node-expat 2.4.1 are verified on Node 22 locally.
   NODE_VERSION = "22"
-  DB_TYPE = "pgsql"
 
-# Belt and braces with next.config.js's outputFileTracingIncludes: ship Prisma's
-# Lambda engine with every function. .npmrc's node-linker=hoisted keeps it at this
-# flat path instead of deep inside node_modules/.pnpm.
+# Ship Prisma's Lambda engine with every function. .npmrc's node-linker=hoisted
+# keeps it at this flat path instead of deep inside node_modules/.pnpm.
 [functions]
   included_files = [
     "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node",
     "node_modules/.prisma/client/schema.prisma",
   ]
 
-# Next.js Runtime v5 (needs Next 13.5+). It bundles the server from Next's standalone
-# output, which carries Prisma's engine. v4, installed from Netlify's UI, did not.
+# Next.js Runtime v5 (needs Next 13.5+). v4, installed from Netlify's UI at first,
+# never shipped Prisma's engine.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
 # Must come after the Next.js runtime: it patches the function that runtime builds.
 [[plugins]]
   package = "./netlify/plugins/copy-prisma-engine"
-
-# The widget loads /js/iframe.umd.js as a <script type="module"> from inside an
-# iframe whose origin is the blog, and browsers only run a cross-site module
-# script when the response carries CORS headers. Without this the comment box
-# stays empty on every embedding site.
-[[headers]]
-  for = "/js/*"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"

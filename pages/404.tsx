@@ -1,10 +1,19 @@
-function NotFoundPage() {
+import NextHead from 'next/head'
+
+export default function NotFoundPage() {
   return (
-    <>
-      Not found
-    </>
+    <main className="auth-page">
+      <NextHead>
+        <title>Not found · Comments</title>
+      </NextHead>
+      <section className="auth-card">
+        <p className="kicker">404</p>
+        <h1>Nothing here</h1>
+        <p className="auth-lede">That page doesn’t exist.</p>
+        <a className="btn" href="/dashboard">
+          Go to the dashboard <span className="btn-arrow" aria-hidden="true">→</span>
+        </a>
+      </section>
+    </main>
   )
 }
-
-
-export default NotFoundPage

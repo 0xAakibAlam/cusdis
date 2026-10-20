@@ -1,62 +1,26 @@
-import * as React from "react"
-import { apiClient } from "../../utils.client"
-import { Project } from "@prisma/client"
-import { ProjectService } from "../../service/project.service"
-import { getSession } from "../../utils.server"
+import { GetServerSideProps } from 'next'
+import { ProjectService } from '../../service/project.service'
+import { getSession } from '../../utils.server'
 
-
-export const getAllProjects = async () => {
-  const res = await apiClient.get<{
-    data: Project[]
-  }>("/projects")
-  return res.data.data
+// Sends you to your first site's comments, or to "new site" if you have none.
+export default function Dashboard() {
+  return null
 }
 
-function Dashboard() {
-  return (
-    <div>
-
-    </div>
-  )
-}
-
-export async function getServerSideProps(ctx) {
-
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const session = await getSession(ctx.req)
-
   if (!session) {
-    return {
-      redirect: {
-        destination: '/api/auth/signin',
-        permanent: false,
-      }
-    }
+    return { redirect: { destination: '/login?callbackUrl=/dashboard', permanent: false } }
   }
 
-  const projectService = new ProjectService(ctx.req)
-
-  const defaultProject = await projectService.getFirstProject(session.uid, {
-    select: {
-      id: true
-    }
+  const first = await new ProjectService(ctx.req).getFirstProject(session.uid, {
+    select: { id: true },
   })
 
-  if (!defaultProject) {
-    return {
-      redirect: {
-        destination: `/getting-start`,
-        permanent: false
-      }
-    }
-  } else {
-    // redirect to project dashboard
-    return {
-      redirect: {
-        destination: `/dashboard/project/${defaultProject.id}`,
-        permanent: false
-      }
-    }
+  return {
+    redirect: {
+      destination: first ? `/dashboard/${first.id}` : '/dashboard/new',
+      permanent: false,
+    },
   }
 }
-
-export default Dashboard

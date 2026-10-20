@@ -1,8 +1,7 @@
 import NextAuth from "next-auth";
 import Adapters from "next-auth/adapters";
-import { prisma, resolvedConfig, singletonSync } from "../../../utils.server";
+import { prisma, resolvedConfig } from "../../../utils.server";
 import { authProviders } from "../../../config.server";
-import { statService } from "../../../service/stat.service";
 
 // Using Module Augmentation
 // https://next-auth.js.org/getting-started/typescript
@@ -36,6 +35,13 @@ export default NextAuth({
     secret: resolvedConfig.jwtSecret,
   },
 
+  // Custom sign-in page styled like the blog (pages/login.tsx). Errors such as
+  // a wrong password come back to it as ?error=CredentialsSignin.
+  pages: {
+    signIn: '/login',
+    error: '/login',
+  },
+
   callbacks: {
     session(session, user) {
       session.uid = user.id
@@ -47,10 +53,6 @@ export default NextAuth({
       }
       return token
     },
-    signIn() {
-      statService.capture('signIn')
-      return true
-    }
   },
 
   events: {
