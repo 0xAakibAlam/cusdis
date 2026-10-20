@@ -55,7 +55,7 @@ export default function Login({ callbackUrl, error, signedIn }: Props) {
         {signedIn && (
           <p className="hint" style={{ margin: '0 0 18px' }}>
             You’re still signed in from before.{' '}
-            <a href={callbackUrl}>Go to the dashboard</a> or{' '}
+            <a href={callbackUrl}>Go to your sites</a> or{' '}
             <button className="link-btn" type="button" style={{ fontSize: 'inherit' }}
               onClick={() => signOut({ callbackUrl: '/login' })}>
               sign out
@@ -108,14 +108,14 @@ export default function Login({ callbackUrl, error, signedIn }: Props) {
 // own callbackUrl, but this page's redirect below didn't, so
 // /login?callbackUrl=https://evil.example was an open redirect.
 function safeCallback(raw: unknown): string {
-  if (typeof raw !== 'string') return '/dashboard'
+  if (typeof raw !== 'string') return '/'
   const base = process.env.NEXTAUTH_URL || 'http://localhost:3000'
   try {
     const url = new URL(raw, base)
-    if (url.origin !== new URL(base).origin) return '/dashboard'
+    if (url.origin !== new URL(base).origin) return '/'
     return url.pathname + url.search
   } catch {
-    return '/dashboard'
+    return '/'
   }
 }
 

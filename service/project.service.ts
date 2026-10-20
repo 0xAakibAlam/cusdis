@@ -5,11 +5,12 @@ import { prisma } from '../utils.server'
 // A "project" is a site: one blog (or any other site) whose comments this
 // instance stores. Its id is the app id the site embeds.
 export class ProjectService extends RequestScopeService {
-  async create(title: string) {
+  async create(title: string, slug: string) {
     const session = await this.getSession()
     return await prisma.project.create({
       data: {
         title,
+        slug,
         owner: {
           connect: {
             id: session.uid,
@@ -47,8 +48,36 @@ export class ProjectService extends RequestScopeService {
       select: {
         id: true,
         title: true,
+        slug: true,
       },
     })
+  }
+
+  // A live site of this owner by its URL name, or by its id (for sites made
+  // before URL names existed, and old /dashboard/<id> links).
+  async findByKey(ownerId: string, key: string) {
+    return await prisma.project.findFirst({
+      where: {
+        ownerId,
+        deletedAt: null,
+        OR: [{ slug: key }, { id: key }],
+      },
+      select: { id: true, title: true, slug: true },
+    })
+  }
+
+  // Is this URL name already used by another live site of the same owner?
+  async slugTaken(ownerId: string, slug: string, exceptId?: string) {
+    const hit = await prisma.project.findFirst({
+      where: {
+        ownerId,
+        slug,
+        deletedAt: null,
+        id: exceptId ? { not: exceptId } : undefined,
+      },
+      select: { id: true },
+    })
+    return !!hit
   }
 
   async getFirstProject(ownerId: string, options?: {
@@ -68,14 +97,12 @@ export class ProjectService extends RequestScopeService {
     return project as Project
   }
 
-  async rename(projectId: string, title: string) {
+  async update(projectId: string, data: { title: string; slug: string }) {
     await prisma.project.update({
       where: {
         id: projectId,
       },
-      data: {
-        title,
-      },
+      data,
     })
   }
 

@@ -1,9 +1,27 @@
-// There's no landing page: this instance only serves comments for its owner's
-// sites, so "/" goes straight to the dashboard (which sends you to sign in).
+import { GetServerSideProps } from 'next'
+import { ProjectService } from '../service/project.service'
+import { getSession } from '../utils.server'
+
+// No landing page: "/" opens your first site (/<slug>), "new site" if you have
+// none, or the sign-in page if you're signed out.
 export default function Index() {
   return null
 }
 
-export async function getServerSideProps() {
-  return { redirect: { destination: '/dashboard', permanent: false } }
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const session = await getSession(ctx.req)
+  if (!session) {
+    return { redirect: { destination: '/login', permanent: false } }
+  }
+
+  const first = await new ProjectService(ctx.req).getFirstProject(session.uid, {
+    select: { id: true, slug: true },
+  })
+
+  return {
+    redirect: {
+      destination: first ? `/${first.slug || first.id}` : '/new',
+      permanent: false,
+    },
+  }
 }

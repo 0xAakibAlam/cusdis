@@ -3,7 +3,7 @@
 The comment backend behind [0xaakibalam.com/blogs](https://0xaakibalam.com/blogs/). It's a
 trimmed fork of [Cusdis](https://github.com/djyde/cusdis) (MIT, now deprecated upstream): only
 what the blog's comments need is left. Live at
-<https://0xaakibalam-blog-comments.netlify.app> (Netlify, with a free Neon Postgres).
+<https://comments.0xaakibalam.com> (Netlify, with a free Neon Postgres).
 
 ## What's here
 
@@ -11,8 +11,9 @@ what the blog's comments need is left. Live at
   - `GET /api/open/comments?appId&pageId&page`: a page's approved comments, with replies.
   - `POST /api/open/comments`: post a comment (`appId, pageId, nickname, content, parentId?`).
   - `GET /api/open/project/<appId>/comments/count?pageIds=a,b`: approved counts per page.
-- **Dashboard** (`/dashboard`, one admin): add, rename, and delete sites; read every comment;
-  reply as the author; delete; approve held comments.
+- **Dashboard** (one admin): each site lives at `/<slug>` (the blog is `/blogs`), `/new`
+  adds one, `/` opens the first. Rename a site or change its URL, delete it, read every
+  comment, reply as the author, delete, approve held comments.
 - **Sign-in page** (`/login`), styled like the blog.
 
 The blog's side is `site/_includes/comments.html` and `site/assets/js/comments.js` in

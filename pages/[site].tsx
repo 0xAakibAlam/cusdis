@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { GetServerSideProps } from 'next'
 import NextHead from 'next/head'
 import { useRouter } from 'next/router'
-import { ProjectService } from '../../service/project.service'
-import { CommentService, CommentItem } from '../../service/comment.service'
-import { getSession, prisma } from '../../utils.server'
-import { api, SiteSummary, Topbar } from '../../components/Topbar'
+import { ProjectService } from '../service/project.service'
+import { CommentService, CommentItem } from '../service/comment.service'
+import { getSession, prisma } from '../utils.server'
+import { api, SiteSummary, Topbar } from '../components/Topbar'
 
 // One site: its app id, its comments (newest first, with replies), and the
 // owner's actions on them: reply as author, approve (only shows for held
@@ -21,7 +21,7 @@ type Note = Pick<CommentItem, 'id' | 'content' | 'parsedContent' | 'approved' | 
 
 type Props = {
   sites: SiteSummary[]
-  site: { id: string; title: string }
+  site: { id: string; title: string; slug: string }
   comments: Note[]
   page: number
   pageCount: number
@@ -146,15 +146,17 @@ export default function SitePage({ sites, site, comments, page, pageCount, total
   const refresh = () => router.replace(router.asPath, undefined, { scroll: false })
   const [renaming, setRenaming] = useState(false)
   const [title, setTitle] = useState(site.title)
+  const [slug, setSlug] = useState(site.slug)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function rename(e: React.FormEvent) {
     e.preventDefault()
     try {
-      await api(`/project/${site.id}`, { method: 'PUT', body: { title } })
+      await api(`/project/${site.id}`, { method: 'PUT', body: { title, slug } })
       setRenaming(false)
-      refresh()
+      if (slug !== site.slug) location.href = `/${slug}`
+      else refresh()
     } catch (err) {
       setError(err.message)
     }
@@ -164,7 +166,7 @@ export default function SitePage({ sites, site, comments, page, pageCount, total
     if (!confirm(`Delete “${site.title}”? Its comments stop showing on that site.`)) return
     try {
       await api(`/project/${site.id}`, { method: 'DELETE' })
-      location.href = '/dashboard'
+      location.href = '/'
     } catch (err) {
       setError(err.message)
     }
@@ -187,15 +189,21 @@ export default function SitePage({ sites, site, comments, page, pageCount, total
                 <form className="rename-form" onSubmit={rename}>
                   <input className="input" value={title} onChange={(e) => setTitle(e.target.value)}
                     maxLength={80} required autoFocus aria-label="Site name" />
-                  <button className="btn" type="submit" disabled={!title.trim()}>Save</button>
+                  <div className="slug-field">
+                    <span className="slug-prefix">/</span>
+                    <input className="input" value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())}
+                      maxLength={40} required spellCheck={false} aria-label="URL"
+                      pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" />
+                  </div>
+                  <button className="btn" type="submit" disabled={!title.trim() || !slug}>Save</button>
                   <button className="btn btn-ghost" type="button"
-                    onClick={() => { setRenaming(false); setTitle(site.title) }}>Cancel</button>
+                    onClick={() => { setRenaming(false); setTitle(site.title); setSlug(site.slug) }}>Cancel</button>
                 </form>
               ) : (
                 <h1 className="site-title">{site.title}</h1>
               )}
               <p className="site-stats">
-                {total} {total === 1 ? 'comment' : 'comments'}
+                <span className="mono">/{site.slug}</span> · {total} {total === 1 ? 'comment' : 'comments'}
                 {held > 0 && ` · ${held} held for approval`}
               </p>
             </div>
@@ -255,17 +263,24 @@ export default function SitePage({ sites, site, comments, page, pageCount, total
 }
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
-  const siteId = ctx.params.siteId as string
+  const key = ctx.params.site as string
   const session = await getSession(ctx.req)
   if (!session) {
-    return { redirect: { destination: `/login?callbackUrl=/dashboard/${siteId}`, permanent: false } }
+    return { redirect: { destination: `/login?callbackUrl=/${encodeURIComponent(key)}`, permanent: false } }
   }
 
+  // /<slug> is the address; /<app id> (old links, or a site with no URL name
+  // yet) still finds the site, and moves to /<slug> when there is one.
   const projectService = new ProjectService(ctx.req)
-  const site = await projectService.get(siteId, { select: { id: true, title: true, ownerId: true, deletedAt: true } })
-  if (!site || site.deletedAt || site.ownerId !== session.uid) {
+  const site = await projectService.findByKey(session.uid, key)
+  if (!site) {
     return { notFound: true }
   }
+  if (site.slug && key !== site.slug) {
+    const page = ctx.query.page ? `?page=${ctx.query.page}` : ''
+    return { redirect: { destination: `/${site.slug}${page}`, permanent: false } }
+  }
+  const siteId = site.id
 
   const page = Math.max(1, Number(ctx.query.page) || 1)
   const result = await new CommentService(ctx.req).getComments(siteId, 0, {
@@ -290,7 +305,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   return {
     props: {
       sites: await projectService.list(),
-      site: { id: site.id, title: site.title },
+      site: { id: site.id, title: site.title, slug: site.slug || site.id },
       // Dates to strings for Next's props serialisation.
       comments: JSON.parse(JSON.stringify(result.data)),
       page,

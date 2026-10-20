@@ -1,6 +1,6 @@
 import { signOut } from 'next-auth/client'
 
-export type SiteSummary = { id: string; title: string }
+export type SiteSummary = { id: string; title: string; slug: string | null }
 
 // The dashboard's top bar: brand, a switcher between sites, "New site", and
 // sign out. `currentId` is null on the new-site page.
@@ -8,7 +8,7 @@ export function Topbar({ sites, currentId }: { sites: SiteSummary[]; currentId: 
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        <a className="brand" href="/dashboard">
+        <a className="brand" href="/">
           <span className="brand-mark" aria-hidden="true" />
           Comments
         </a>
@@ -19,7 +19,8 @@ export function Topbar({ sites, currentId }: { sites: SiteSummary[]; currentId: 
             aria-label="Site"
             value={currentId ?? ''}
             onChange={(e) => {
-              if (e.target.value) location.href = `/dashboard/${e.target.value}`
+              const s = sites.find((x) => x.id === e.target.value)
+              if (s) location.href = `/${s.slug || s.id}`
             }}
           >
             {currentId === null && <option value="">Choose a site</option>}
@@ -33,7 +34,7 @@ export function Topbar({ sites, currentId }: { sites: SiteSummary[]; currentId: 
 
         <span className="topbar-spacer" />
 
-        <a className="btn btn-ghost" href="/dashboard/new">
+        <a className="btn btn-ghost" href="/new">
           + New site
         </a>
         <button
