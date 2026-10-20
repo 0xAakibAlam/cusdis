@@ -21,14 +21,26 @@ declare module "next-auth/jwt" {
   }
 }
 
+// Without a secret, next-auth v3 quietly derives one from its own options,
+// which anyone with this source can reproduce, and could then forge sessions.
+// Refuse to run instead.
+if (!resolvedConfig.jwtSecret || resolvedConfig.jwtSecret.length < 32) {
+  throw new Error('JWT_SECRET must be set to a random string of at least 32 characters')
+}
+
 export default NextAuth({
-  // Configure one or more authentication providers
   providers: authProviders,
 
   adapter: Adapters.Prisma.Adapter({ prisma: prisma }),
 
+  // Signs the csrf token and cookies.
+  secret: resolvedConfig.jwtSecret,
+
   session: {
     jwt: !!resolvedConfig.useLocalAuth,
+    // One admin, a few logins a month: a week is plenty (next-auth's default
+    // is 30 days).
+    maxAge: 7 * 24 * 60 * 60,
   },
 
   jwt: {

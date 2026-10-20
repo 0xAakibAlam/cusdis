@@ -7,9 +7,26 @@ import {
 import { apiHandler } from '../../../utils.server'
 import Cors from 'cors'
 import { ProjectService } from '../../../service/project.service'
+import { prisma } from '../../../utils.server'
 
 const MAX_NICKNAME = 60
 const MAX_CONTENT = 5000
+
+// pageUrl and pageTitle come from whoever posts, and the dashboard shows them
+// (pageUrl as a link). Keep only http(s) URLs, so a "javascript:" URL can't
+// run in the signed-in dashboard, and cap both lengths.
+function cleanUrl(raw: unknown) {
+  if (typeof raw !== 'string' || raw.length > 500) return undefined
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : undefined
+  } catch {
+    return undefined
+  }
+}
+function cleanTitle(raw: unknown) {
+  return typeof raw === 'string' ? raw.trim().slice(0, 300) || undefined : undefined
+}
 
 export default apiHandler()
   .use(
@@ -97,6 +114,24 @@ export default apiHandler()
       return
     }
 
+    // A reply has to answer a live comment on the same page of the same site;
+    // otherwise any comment could be hung under any other thread.
+    if (body.parentId) {
+      const parent = await prisma.comment.findFirst({
+        where: {
+          id: String(body.parentId),
+          deletedAt: null,
+          page: { slug: body.pageId, projectId: body.appId },
+        },
+        select: { id: true },
+      })
+      if (!parent) {
+        res.status(400)
+        res.json({ message: 'That comment can’t be replied to.' })
+        return
+      }
+    }
+
     const comment = await commentService.addComment(
       body.appId,
       body.pageId,
@@ -104,10 +139,10 @@ export default apiHandler()
         content,
         email: typeof body.email === 'string' ? body.email.trim() : '',
         nickname,
-        pageTitle: body.pageTitle,
-        pageUrl: body.pageUrl,
+        pageTitle: cleanTitle(body.pageTitle),
+        pageUrl: cleanUrl(body.pageUrl),
       },
-      body.parentId,
+      body.parentId ? String(body.parentId) : undefined,
     )
 
     res.json({

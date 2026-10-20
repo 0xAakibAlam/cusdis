@@ -83,11 +83,14 @@ function Comment({ c, isReply, refresh }: { c: Note; isReply?: boolean; refresh:
         {c.by_email && <span className="c-meta">{c.by_email}</span>}
       </header>
 
-      {!isReply && (
-        <a className="c-page" href={c.page.url || '#'} target="_blank" rel="noreferrer">
+      {!isReply && (/^https?:\/\//.test(c.page.url || '') ? (
+        // Checked again here, not just on save: older rows predate the check.
+        <a className="c-page" href={c.page.url} target="_blank" rel="noreferrer noopener">
           on {c.page.title || c.page.slug} ↗
         </a>
-      )}
+      ) : (
+        <span className="c-page">on {c.page.title || c.page.slug}</span>
+      ))}
 
       <div className="c-body" dangerouslySetInnerHTML={{ __html: c.parsedContent }} />
 

@@ -6,12 +6,13 @@
 import { useEffect, useState } from 'react'
 import { GetServerSideProps } from 'next'
 import NextHead from 'next/head'
-import { getCsrfToken } from 'next-auth/client'
+import { getCsrfToken, signOut } from 'next-auth/client'
 import { getSession } from '../utils.server'
 
 type Props = {
   callbackUrl: string
   error: string | null
+  signedIn: boolean
 }
 
 const ERRORS: Record<string, string> = {
@@ -19,7 +20,7 @@ const ERRORS: Record<string, string> = {
   SessionRequired: 'Sign in to see that page.',
 }
 
-export default function Login({ callbackUrl, error }: Props) {
+export default function Login({ callbackUrl, error, signedIn }: Props) {
   // Fetched in the browser, not in getServerSideProps: the token has to match
   // the csrf cookie, and only a browser request to /api/auth/csrf sets that
   // cookie on the reader's side. Fetching it server-side left the cookie on
@@ -49,6 +50,17 @@ export default function Login({ callbackUrl, error }: Props) {
         {message && (
           <p className="alert" role="alert">
             {message}
+          </p>
+        )}
+        {signedIn && (
+          <p className="hint" style={{ margin: '0 0 18px' }}>
+            You’re still signed in from before.{' '}
+            <a href={callbackUrl}>Go to the dashboard</a> or{' '}
+            <button className="link-btn" type="button" style={{ fontSize: 'inherit' }}
+              onClick={() => signOut({ callbackUrl: '/login' })}>
+              sign out
+            </button>
+            .
           </p>
         )}
 
@@ -92,18 +104,34 @@ export default function Login({ callbackUrl, error }: Props) {
   )
 }
 
+// Only ever send people back to a page on this site. next-auth validates its
+// own callbackUrl, but this page's redirect below didn't, so
+// /login?callbackUrl=https://evil.example was an open redirect.
+function safeCallback(raw: unknown): string {
+  if (typeof raw !== 'string') return '/dashboard'
+  const base = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  try {
+    const url = new URL(raw, base)
+    if (url.origin !== new URL(base).origin) return '/dashboard'
+    return url.pathname + url.search
+  } catch {
+    return '/dashboard'
+  }
+}
+
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const q = ctx.query
-  const callbackUrl = typeof q.callbackUrl === 'string' ? q.callbackUrl : '/dashboard'
+  const callbackUrl = safeCallback(q.callbackUrl)
+  const error = typeof q.error === 'string' ? q.error : null
+  const signedIn = !!(await getSession(ctx.req))
 
-  if (await getSession(ctx.req)) {
+  // Already signed in and not coming back from a failed attempt: straight on.
+  // After a failed attempt, stay here and show the error. Forwarding to the
+  // dashboard on an old, still-valid session made a wrong password look like
+  // it had worked.
+  if (signedIn && !error) {
     return { redirect: { destination: callbackUrl, permanent: false } }
   }
 
-  return {
-    props: {
-      callbackUrl,
-      error: typeof q.error === 'string' ? q.error : null,
-    },
-  }
+  return { props: { callbackUrl, error, signedIn } }
 }
